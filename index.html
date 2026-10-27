@@ -1,0 +1,1259 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔮 行政經費管理平台</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'Microsoft JhengHei', 'sans-serif'] },
+                    colors: {
+                        primary: { 50: '#eef2ff', 100: '#e0e7ff', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca' },
+                        magic: { 50: '#faf5ff', 500: '#a855f7', 600: '#9333ea' },
+                        success: { 500: '#10b981', 600: '#059669' },
+                        warning: { 500: '#f59e0b', 600: '#d97706' },
+                        danger: { 500: '#ef4444', 600: '#e11d48' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', 'Microsoft JhengHei', sans-serif; background-color: #f8fafc; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* Toast Notifications */
+        #toast-container { position: fixed; bottom: 1rem; right: 1rem; z-index: 50; display: flex; flex-direction: column; gap: 0.5rem; }
+        .toast { padding: 1rem; border-radius: 0.5rem; color: white; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); display: flex; align-items: center; gap: 0.5rem; animation: slideIn 0.3s ease-out; }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .toast.success { background-color: #059669; }
+        .toast.error { background-color: #e11d48; }
+        .toast.warning { background-color: #d97706; }
+        .toast.info { background-color: #4f46e5; }
+
+        /* Print Styles for Receipt */
+        @media print {
+            body * { visibility: hidden; }
+            #print-area, #print-area * { visibility: visible; }
+            #print-area { position: absolute; left: 0; top: 0; width: 100%; background: white; padding: 20px; }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body class="text-slate-800 h-screen flex flex-col overflow-hidden">
+
+    <!-- Login / Role Selector Modal -->
+    <div id="login-modal" class="fixed inset-0 bg-slate-900/80 flex items-center justify-center z-50 transition-opacity">
+        <div class="bg-white rounded-xl shadow-2xl p-8 max-w-md w-full mx-4">
+            <div class="text-center mb-8">
+                <div class="text-5xl mb-4">🔮</div>
+                <h1 class="text-2xl font-bold text-slate-800">行政經費管理平台</h1>
+                <p class="text-slate-500 mt-2">單一使用者全功能模式</p>
+            </div>
+            <div class="space-y-3">
+                <button onclick="loginAs('superuser')" class="w-full p-4 border border-slate-200 rounded-lg hover:border-primary-500 hover:bg-primary-50 flex items-center gap-4 transition-colors">
+                    <div class="bg-purple-100 text-purple-600 p-3 rounded-full"><i class="ph ph-shield-star text-xl"></i></div>
+                    <div class="text-left">
+                        <div class="font-semibold">進入系統 (全功能)</div>
+                        <div class="text-sm text-slate-500">免審核，可操作所有計畫與領據</div>
+                    </div>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App UI (Hidden until login) -->
+    <div id="main-app" class="hidden h-full flex flex-col">
+        <!-- Navbar -->
+        <header class="bg-white border-b border-slate-200 px-6 py-3 flex justify-between items-center shrink-0 shadow-sm relative z-10">
+            <div class="flex items-center gap-2">
+                <span class="text-2xl">🔮</span>
+                <span class="text-lg font-bold text-slate-800">行政經費管理平台</span>
+            </div>
+            <div class="flex items-center gap-4">
+                <div id="user-badge" class="px-3 py-1 rounded-full text-sm font-medium border flex items-center gap-2">
+                    <!-- Populated via JS -->
+                </div>
+                <button onclick="logout()" class="text-slate-500 hover:text-slate-800"><i class="ph ph-sign-out text-xl"></i></button>
+            </div>
+        </header>
+
+        <div class="flex flex-1 overflow-hidden">
+            <!-- Sidebar -->
+            <aside class="w-64 bg-slate-900 text-slate-300 flex flex-col shrink-0">
+                <div class="p-4 flex-1">
+                    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4 px-3">功能選單</div>
+                    <nav class="space-y-1">
+                        <button onclick="switchTab('dashboard')" id="nav-dashboard" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-800 hover:text-white transition-colors nav-btn active bg-slate-800 text-white">
+                            <i class="ph ph-squares-four text-lg"></i> 總覽儀表板
+                        </button>
+                        <button onclick="switchTab('projects')" id="nav-projects" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-800 hover:text-white transition-colors nav-btn">
+                            <i class="ph ph-folder-open text-lg"></i> 計畫預算管理
+                        </button>
+                        <button onclick="switchTab('reimbursements')" id="nav-reimbursements" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-800 hover:text-white transition-colors nav-btn">
+                            <i class="ph ph-receipt text-lg"></i> 報銷審批中心
+                        </button>
+                        <button onclick="switchTab('honorarium')" id="nav-honorarium" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-800 hover:text-white transition-colors nav-btn">
+                            <i class="ph ph-users-three text-lg"></i> 教師鐘點與領據
+                        </button>
+                    </nav>
+                </div>
+                <div class="p-4 border-t border-slate-800 text-center">
+                    <p class="text-xs text-slate-500">© 2026 TonyStudio</p>
+                    <p class="text-[10px] text-slate-600">Vibe Coding Demo</p>
+                </div>
+            </aside>
+
+            <!-- Main Content Area -->
+            <main class="flex-1 bg-slate-50 overflow-y-auto p-6 relative">
+                
+                <!-- 1. Dashboard Tab -->
+                <div id="tab-dashboard" class="tab-content active max-w-6xl mx-auto">
+                    <h2 class="text-2xl font-bold text-slate-800 mb-6">總覽儀表板</h2>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                        <div class="bg-white rounded-xl shadow-sm p-6 border border-slate-100 border-l-4 border-l-primary-500">
+                            <div class="text-sm font-medium text-slate-500 mb-1">年度總預算額度</div>
+                            <div class="text-3xl font-bold text-slate-800" id="dash-total-budget">$0</div>
+                        </div>
+                        <div class="bg-white rounded-xl shadow-sm p-6 border border-slate-100 border-l-4 border-l-warning-500">
+                            <div class="text-sm font-medium text-slate-500 mb-1">審核中鎖定金額</div>
+                            <div class="text-3xl font-bold text-slate-800" id="dash-pending">$0</div>
+                        </div>
+                        <div class="bg-white rounded-xl shadow-sm p-6 border border-slate-100 border-l-4 border-l-success-500">
+                            <div class="text-sm font-medium text-slate-500 mb-1">實際可用餘額</div>
+                            <div class="text-3xl font-bold text-success-600" id="dash-balance">$0</div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <!-- Project Health -->
+                        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-lg font-semibold text-slate-800">計畫執行健康度</h3>
+                                <i class="ph ph-chart-line-up text-slate-400"></i>
+                            </div>
+                            <div id="dash-project-health" class="space-y-4">
+                                <!-- Populated by JS -->
+                                <div class="text-center text-slate-500 py-4">載入中...</div>
+                            </div>
+                        </div>
+
+                        <!-- Recent Activity -->
+                        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-lg font-semibold text-slate-800">最新報銷動態</h3>
+                                <button onclick="switchTab('reimbursements')" class="text-sm text-primary-600 hover:underline">查看全部</button>
+                            </div>
+                            <div id="dash-recent-activity" class="space-y-3">
+                                <!-- Populated by JS -->
+                                <div class="text-center text-slate-500 py-4">無近期動態</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. Projects Tab -->
+                <div id="tab-projects" class="tab-content max-w-6xl mx-auto">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold text-slate-800">計畫預算管理</h2>
+                        <button onclick="openModal('project-modal')" class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition-colors flex items-center gap-2 admin-only hidden">
+                            <i class="ph ph-plus-circle text-lg"></i> 新增計畫
+                        </button>
+                    </div>
+
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-slate-50 text-slate-500 text-sm border-b border-slate-200">
+                                    <th class="p-4 font-medium">計畫代碼/名稱</th>
+                                    <th class="p-4 font-medium">所屬處室</th>
+                                    <th class="p-4 font-medium">執行進度 (已用+待審)</th>
+                                    <th class="p-4 font-medium text-right">總額度</th>
+                                    <th class="p-4 font-medium text-right">可用餘額</th>
+                                </tr>
+                            </thead>
+                            <tbody id="projects-table-body" class="divide-y divide-slate-100">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 3. Reimbursements Tab -->
+                <div id="tab-reimbursements" class="tab-content max-w-6xl mx-auto">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold text-slate-800">報銷審批中心</h2>
+                        <button onclick="openModal('reimbursement-modal')" class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition-colors flex items-center gap-2 applicant-only hidden">
+                            <i class="ph ph-file-plus text-lg"></i> 建立報銷單
+                        </button>
+                    </div>
+
+                    <!-- Filter / Tabs -->
+                    <div class="flex gap-2 mb-4 border-b border-slate-200 pb-2">
+                        <button onclick="filterReimb('all')" class="px-4 py-1 text-sm font-medium rounded-full bg-slate-800 text-white reimb-filter" data-filter="all">全部單據</button>
+                        <button onclick="filterReimb('approved')" class="px-4 py-1 text-sm font-medium rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 reimb-filter" data-filter="approved">已核准 / 建立</button>
+                    </div>
+
+                    <div class="space-y-4" id="reimbursements-list">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <!-- 4. Honorarium Tab -->
+                <div id="tab-honorarium" class="tab-content max-w-6xl mx-auto">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold text-slate-800">教師鐘點與領據</h2>
+                        <div class="flex gap-2">
+                            <button onclick="openModal('teacher-modal')" class="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded-lg font-medium shadow-sm transition-colors flex items-center gap-2 admin-only hidden">
+                                <i class="ph ph-user-plus text-lg"></i> 管理教師檔
+                            </button>
+                            <button onclick="openModal('session-modal')" class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition-colors flex items-center gap-2 applicant-only hidden">
+                                <i class="ph ph-calendar-plus text-lg"></i> 登錄授課紀錄
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <!-- Sessions List -->
+                        <div class="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[600px]">
+                            <div class="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+                                <h3 class="font-semibold text-slate-800">未申領授課紀錄 (Draft)</h3>
+                                <span class="text-xs text-slate-500">勾選以產製領據</span>
+                            </div>
+                            <div class="overflow-y-auto flex-1 p-0">
+                                <table class="w-full text-left border-collapse text-sm">
+                                    <thead class="bg-white sticky top-0 shadow-sm">
+                                        <tr class="text-slate-500 border-b border-slate-200">
+                                            <th class="p-3 w-10 text-center"><input type="checkbox" id="selectAllSessions" onchange="toggleAllSessions()"></th>
+                                            <th class="p-3">日期/星期</th>
+                                            <th class="p-3">教師</th>
+                                            <th class="p-3 text-center">節數</th>
+                                            <th class="p-3 text-right">單價</th>
+                                            <th class="p-3 text-right">小計</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="sessions-table-body" class="divide-y divide-slate-100">
+                                        <!-- Populated by JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Receipt Generator Panel -->
+                        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col h-[600px]">
+                            <div class="flex items-center gap-2 mb-4 text-magic-600 border-b border-slate-100 pb-3">
+                                <i class="ph ph-magic-wand text-2xl"></i>
+                                <h3 class="font-bold text-lg">領據產製引擎</h3>
+                            </div>
+                            
+                            <div class="flex-1 overflow-y-auto">
+                                <div class="space-y-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-700 mb-1">單位 / 學校名稱 (領據抬頭)</label>
+                                        <input type="text" id="receipt-school-input" class="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-primary-500 outline-none" value="市立高級中學">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-700 mb-1">社團名稱</label>
+                                        <input type="text" id="receipt-club-input" class="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-primary-500 outline-none" placeholder="例如：籃球社、外聘社團">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-700 mb-1">已選取節數</label>
+                                        <div class="text-2xl font-bold text-slate-800" id="receipt-total-periods">0 節</div>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-700 mb-1">預估總金額</label>
+                                        <div class="text-3xl font-bold text-primary-600" id="receipt-total-amount">$0</div>
+                                    </div>
+                                    
+                                    <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800 mt-4">
+                                        <i class="ph ph-info mr-1"></i> 請確認勾選同一位教師的紀錄以產製標準領據。跨教師需分開產製。
+                                    </div>
+                                    
+                                    <div id="receipt-teacher-info" class="mt-4 p-3 bg-slate-50 rounded-lg hidden border border-slate-200 text-xs space-y-1">
+                                        <div class="font-semibold text-slate-800 text-sm" id="rt-name">-</div>
+                                        <div><span class="text-slate-500">身分證：</span><span id="rt-id">-</span></div>
+                                        <div><span class="text-slate-500">電話：</span><span id="rt-phone">-</span></div>
+                                        <div><span class="text-slate-500">戶籍地：</span><span id="rt-addr">-</span></div>
+                                        <div><span class="text-slate-500">帳戶：</span><span id="rt-bank" class="font-mono">-</span></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="pt-4 border-t border-slate-200 mt-auto">
+                                <button onclick="generateReceipt()" id="btn-generate-receipt" class="w-full bg-slate-800 hover:bg-slate-900 text-white py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2" disabled>
+                                    <i class="ph ph-printer"></i> 產製列印版領據
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </main>
+        </div>
+    </div>
+
+    <!-- Modals Container -->
+    <div id="modal-container">
+        <!-- Project Modal -->
+        <div id="project-modal" class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center z-50">
+            <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-bold">新增計畫預算</h3>
+                    <button onclick="closeModal('project-modal')" class="text-slate-400 hover:text-slate-600"><i class="ph ph-x text-xl"></i></button>
+                </div>
+                <form id="project-form" onsubmit="handleProjectSubmit(event)" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700">計畫代碼</label>
+                        <input type="text" id="p-id" required class="mt-1 w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-primary-500 outline-none" placeholder="例如: PROJ-2026-01">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700">計畫名稱</label>
+                        <input type="text" id="p-title" required class="mt-1 w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-primary-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700">總核定預算 (NT$)</label>
+                        <input type="number" id="p-budget" required min="1" class="mt-1 w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-primary-500 outline-none">
+                    </div>
+                    <div class="pt-4 flex justify-end gap-2">
+                        <button type="button" onclick="closeModal('project-modal')" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">取消</button>
+                        <button type="submit" class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">儲存計畫</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Teacher Modal -->
+        <div id="teacher-modal" class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center z-50">
+            <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-bold">新增教師基本資料</h3>
+                    <button onclick="closeModal('teacher-modal')" class="text-slate-400 hover:text-slate-600"><i class="ph ph-x text-xl"></i></button>
+                </div>
+                <form id="teacher-form" onsubmit="handleTeacherSubmit(event)" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700">姓名 <span class="text-red-500">*</span></label>
+                        <input type="text" id="t-name" required class="mt-1 w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-primary-500 outline-none">
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700">類別</label>
+                            <select id="t-type" class="mt-1 w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-primary-500 outline-none">
+                                <option value="內聘">內聘</option>
+                                <option value="外聘專家">外聘專家</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700">單節鐘點費 ($) <span class="text-red-500">*</span></label>
+                            <input type="number" id="t-rate" required min="1" class="mt-1 w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-primary-500 outline-none">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700">身分證字號</label>
+                        <input type="text" id="t-idnumber" class="mt-1 w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-primary-500 outline-none" placeholder="例如: A123456789">
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700">電話</label>
+                            <input type="text" id="t-phone" class="mt-1 w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-primary-500 outline-none" placeholder="0912-345678">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700">銀行帳戶</label>
+                            <input type="text" id="t-bank" class="mt-1 w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-primary-500 outline-none" placeholder="700-123456789">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700">戶籍地址</label>
+                        <input type="text" id="t-address" class="mt-1 w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-primary-500 outline-none" placeholder="例如: 台北市中正區中山南路1號">
+                    </div>
+                    <div class="pt-4 flex justify-end gap-2">
+                        <button type="button" onclick="closeModal('teacher-modal')" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">取消</button>
+                        <button type="submit" class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">儲存資料</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Session Modal (Log Hours) -->
+        <div id="session-modal" class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center z-50">
+            <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-bold">登錄授課紀錄</h3>
+                    <button onclick="closeModal('session-modal')" class="text-slate-400 hover:text-slate-600"><i class="ph ph-x text-xl"></i></button>
+                </div>
+                <form id="session-form" onsubmit="handleSessionSubmit(event)" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700">所屬計畫</label>
+                        <select id="s-project" required class="mt-1 w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-primary-500 outline-none">
+                            <!-- Populated by JS -->
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700">授課教師</label>
+                        <select id="s-teacher" required class="mt-1 w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-primary-500 outline-none">
+                            <!-- Populated by JS -->
+                        </select>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700">日期</label>
+                            <input type="date" id="s-date" required class="mt-1 w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-primary-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700">節數</label>
+                            <input type="number" id="s-period" required min="1" max="8" value="1" class="mt-1 w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-primary-500 outline-none">
+                        </div>
+                    </div>
+                    <div class="bg-slate-50 p-3 rounded text-sm text-slate-600">
+                        系統將自動防呆檢查同一天是否重複登錄。登錄後視窗不會關閉，方便您連續點選其他日期。
+                    </div>
+                    <div class="pt-4 flex justify-end gap-2">
+                        <button type="button" onclick="closeModal('session-modal')" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">完成並關閉</button>
+                        <button type="submit" class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">新增紀錄</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Reimbursement Modal -->
+        <div id="reimbursement-modal" class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center z-50">
+            <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl p-6 h-[80vh] flex flex-col">
+                <div class="flex justify-between items-center mb-4 shrink-0">
+                    <h3 class="text-lg font-bold">建立報銷單</h3>
+                    <button onclick="closeModal('reimbursement-modal')" class="text-slate-400 hover:text-slate-600"><i class="ph ph-x text-xl"></i></button>
+                </div>
+                <form id="reimb-form" onsubmit="handleReimbSubmit(event)" class="flex-1 overflow-y-auto pr-2 space-y-4 relative">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700">扣款計畫 <span class="text-red-500">*</span></label>
+                            <select id="r-project" required class="mt-1 w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-primary-500 outline-none" onchange="checkProjectBalance()">
+                                <!-- Populated by JS -->
+                            </select>
+                            <div id="r-balance-warning" class="text-xs text-danger-500 mt-1 hidden">可用餘額不足警告</div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700">開支類別 <span class="text-red-500">*</span></label>
+                            <select id="r-category" required class="mt-1 w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-primary-500 outline-none">
+                                <option value="業務費">業務費 (物品、耗材)</option>
+                                <option value="差旅費">差旅費</option>
+                                <option value="鐘點費">鐘點費 (需含領據)</option>
+                                <option value="其他">其他</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700">用途說明 <span class="text-red-500">*</span></label>
+                        <textarea id="r-desc" required rows="3" class="mt-1 w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-primary-500 outline-none" placeholder="請詳細描述開支用途，例如：購買辦公室A4影印紙10包，用於期中考卷列印。"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700">報銷總額 (NT$) <span class="text-red-500">*</span></label>
+                        <input type="number" id="r-amount" required min="1" class="mt-1 w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-primary-500 outline-none text-xl font-bold text-primary-600" oninput="checkProjectBalance()">
+                    </div>
+                    <div class="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                        <h4 class="text-sm font-medium text-slate-700 mb-2">附件憑證</h4>
+                        <div class="border-2 border-dashed border-slate-300 rounded bg-white p-4 text-center text-slate-500 text-sm hover:bg-slate-50 transition-colors cursor-pointer">
+                            <i class="ph ph-upload-simple text-2xl mb-1"></i><br>
+                            點擊或拖曳上傳單據 (JPG, PDF)<br>
+                            <span class="text-xs text-slate-400">(Demo環境將略過實際上傳)</span>
+                        </div>
+                    </div>
+                    <div class="pt-4 flex justify-end gap-2 shrink-0 border-t border-slate-100 mt-4">
+                        <button type="button" onclick="closeModal('reimbursement-modal')" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">取消</button>
+                        <button type="submit" id="btn-submit-reimb" class="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium flex items-center gap-2 shadow-md shadow-primary-200">
+                            <i class="ph ph-paper-plane-tilt"></i> 建立報銷單
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Review Modal -->
+        <div id="review-modal" class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center z-50">
+            <div class="bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-bold">經費審核</h3>
+                    <button onclick="closeModal('review-modal')" class="text-slate-400 hover:text-slate-600"><i class="ph ph-x text-xl"></i></button>
+                </div>
+                <div id="review-content" class="space-y-4">
+                    <!-- Populated dynamically -->
+                </div>
+                <div class="mt-4">
+                    <label class="block text-sm font-medium text-slate-700">審核意見 (若駁回必填)</label>
+                    <textarea id="review-comment" rows="2" class="mt-1 w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-primary-500 outline-none"></textarea>
+                </div>
+                <div class="pt-4 flex justify-end gap-2 mt-4 border-t border-slate-100">
+                    <button onclick="processReview('rejected')" class="px-4 py-2 bg-rose-100 text-rose-700 rounded-lg hover:bg-rose-200 font-medium">駁回退件</button>
+                    <button onclick="processReview('approved')" class="px-6 py-2 bg-success-600 text-white rounded-lg hover:bg-success-700 font-medium shadow-md shadow-success-200">核准撥款</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container"></div>
+
+    <div id="print-area" class="no-print">
+        <div class="text-center mb-8">
+            <h1 class="text-2xl font-bold border-b-2 border-black inline-block pb-1">領 據</h1>
+        </div>
+        <p class="mb-4 tracking-wide leading-relaxed">
+            茲向 <span id="print-school-name" class="font-bold underline underline-offset-4 px-2"></span>，領取 <span id="print-year-month" class="font-bold underline underline-offset-4 px-2"></span> <span id="print-club-name" class="font-bold underline underline-offset-4 px-2"></span>外聘指導教練鐘點費，共計新台幣：<span id="print-total-chinese" class="font-bold underline underline-offset-4 px-2"></span>元整。
+        </p>
+        
+        <table class="w-full border-collapse border border-black text-sm mb-6 mt-4">
+            <thead>
+                <tr>
+                    <th class="border border-black p-2 bg-gray-100">日期</th>
+                    <th class="border border-black p-2 bg-gray-100">節數</th>
+                    <th class="border border-black p-2 bg-gray-100">單價</th>
+                    <th class="border border-black p-2 bg-gray-100">小計</th>
+                </tr>
+            </thead>
+            <tbody id="print-tbody">
+                <!-- dynamic -->
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="3" class="border border-black p-2 text-right font-bold">總計 (NT$)</td>
+                    <td class="border border-black p-2 font-bold text-right" id="print-total-num"></td>
+                </tr>
+            </tfoot>
+        </table>
+
+        <div class="mt-12 flex justify-between">
+            <div class="w-1/2 space-y-2">
+                <p class="mb-4">領款人簽章：</p>
+                <div class="border-b border-black w-48 mb-4"></div>
+                <p class="text-sm">身分證字號：<span id="print-t-id" class="inline-block border-b border-black min-w-[150px] px-1 font-mono"></span></p>
+                <p class="text-sm">戶籍地址：<span id="print-t-addr" class="inline-block border-b border-black min-w-[200px] px-1"></span></p>
+                <p class="text-sm">聯絡電話：<span id="print-t-phone" class="inline-block border-b border-black min-w-[150px] px-1 font-mono"></span></p>
+            </div>
+            <div class="w-1/2">
+                <p class="mb-4">匯款帳戶資訊：</p>
+                <p class="text-sm border p-2 min-h-[60px]" id="print-bank-info"></p>
+            </div>
+        </div>
+        <div class="mt-16 text-right">
+            <p>中華民國 <span class="inline-block w-12 border-b border-black text-center" id="print-y"></span> 年 <span class="inline-block w-8 border-b border-black text-center" id="print-m"></span> 月 <span class="inline-block w-8 border-b border-black text-center" id="print-d"></span> 日</p>
+        </div>
+    </div>
+
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithCustomToken, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, onSnapshot, doc, setDoc, addDoc, updateDoc, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global State
+        window.appState = {
+            user: null,
+            role: null, // 'applicant', 'reviewer', 'admin'
+            projects: [],
+            teachers: [],
+            sessions: [],
+            reimbursements: [],
+            selectedSessionsForReceipt: new Set()
+        };
+
+        // Firebase Init based on updated configuration
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'vibe-coding-demo';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            apiKey: "AIzaSyAl40UR0BGUcPsQzggcAF87maITJBQo7mI",
+            authDomain: "money-test01-84231.firebaseapp.com",
+            projectId: "money-test01-84231",
+            storageBucket: "money-test01-84231.firebasestorage.app",
+            messagingSenderId: "424830434666",
+            appId: "1:424830434666:web:a16f12e1d6ec826cf53913",
+            measurementId: "G-QRBQ7C3FRS"
+        };
+        
+        let app, db, auth;
+        try {
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+        } catch (e) {
+            console.warn("Firebase config missing or invalid, using mock mode.", e);
+            showToast("系統目前處於無連線預覽模式", "warning");
+        }
+
+        // Collection Path Helper (Strict Rule 1)
+        const getCol = (colName) => collection(db, 'artifacts', appId, 'public', 'data', colName);
+
+        // Utility: Toast
+        window.showToast = (msg, type = 'info') => {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            let icon = 'ph-info';
+            if(type==='success') icon = 'ph-check-circle';
+            if(type==='error') icon = 'ph-x-circle';
+            if(type==='warning') icon = 'ph-warning';
+            
+            toast.innerHTML = `<i class="ph ${icon} text-xl"></i> <span>${msg}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        };
+
+        window.loginAs = async (role) => {
+            if(!auth) {
+                // Mock mode login
+                setupUserSession(role, "mock-uid");
+                return;
+            }
+
+            try {
+                // Adhere to Rule 3: Auth before Queries
+                const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                if (token) {
+                    await signInWithCustomToken(auth, token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                
+                setupUserSession(role, auth.currentUser.uid);
+            } catch (error) {
+                console.error("Auth error", error);
+                showToast("登入驗證失敗", "error");
+            }
+        };
+
+        function setupUserSession(role, uid) {
+            window.appState.user = { uid, role };
+            window.appState.role = role;
+            
+            // UI Updates based on role
+            let roleName = "系統管理員 (全功能)";
+            let roleColor = "bg-purple-100 text-purple-700 border-purple-200";
+            
+            document.getElementById('user-badge').className = `px-3 py-1 rounded-full text-sm font-medium border flex items-center gap-2 ${roleColor}`;
+            document.getElementById('user-badge').innerHTML = `<i class="ph ph-user"></i> ${roleName}`;
+
+            // Apply RBAC UI rules - 顯示所有按鈕
+            document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('hidden'));
+            document.querySelectorAll('.applicant-only').forEach(el => el.classList.remove('hidden'));
+            document.querySelectorAll('.reviewer-only').forEach(el => el.classList.remove('hidden'));
+
+            // Switch view
+            document.getElementById('login-modal').classList.add('hidden');
+            document.getElementById('main-app').classList.remove('hidden');
+            
+            // Start Data Listeners
+            startDataListeners();
+            switchTab('dashboard');
+            showToast(`已切換身分：${roleName}`, "success");
+        }
+
+        window.logout = () => {
+            document.getElementById('main-app').classList.add('hidden');
+            document.getElementById('login-modal').classList.remove('hidden');
+            // Unsubscribe listeners in real app
+        };
+
+        let unsubProjects, unsubTeachers, unsubSessions, unsubReimbursements;
+
+        function startDataListeners() {
+            if(!db) return; // Skip if mock
+
+            unsubProjects = onSnapshot(getCol('projects'), (snap) => {
+                window.appState.projects = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                renderProjects();
+                renderDashboard();
+                populateDropdowns();
+            }, (err) => console.error(err));
+
+            unsubTeachers = onSnapshot(getCol('teachers'), (snap) => {
+                window.appState.teachers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                populateDropdowns();
+            }, (err) => console.error(err));
+
+            unsubSessions = onSnapshot(getCol('sessions'), (snap) => {
+                window.appState.sessions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                renderSessions();
+            }, (err) => console.error(err));
+
+            unsubReimbursements = onSnapshot(getCol('reimbursements'), (snap) => {
+                window.appState.reimbursements = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                renderReimbursements();
+                renderDashboard(); // Update pending/expended totals
+            }, (err) => console.error(err));
+        }
+
+        window.switchTab = (tabId) => {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(el => {
+                el.classList.remove('bg-slate-800', 'text-white');
+                el.classList.add('text-slate-300');
+            });
+            
+            document.getElementById(`tab-${tabId}`).classList.add('active');
+            const navBtn = document.getElementById(`nav-${tabId}`);
+            if(navBtn) {
+                navBtn.classList.remove('text-slate-300');
+                navBtn.classList.add('bg-slate-800', 'text-white');
+            }
+        };
+
+        window.openModal = (id) => document.getElementById(id).classList.remove('hidden', 'flex');
+        window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
+
+        function renderProjects() {
+            const tbody = document.getElementById('projects-table-body');
+            tbody.innerHTML = '';
+            
+            window.appState.projects.forEach(p => {
+                const totalUsed = (p.expendedAmount || 0) + (p.pendingAmount || 0);
+                const progress = p.allocatedBudget > 0 ? (totalUsed / p.allocatedBudget) * 100 : 0;
+                let colorClass = 'bg-success-500';
+                if(progress > 70) colorClass = 'bg-warning-500';
+                if(progress > 90) colorClass = 'bg-danger-500';
+
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="p-4 border-b border-slate-100">
+                            <div class="font-medium text-slate-800">${p.title}</div>
+                            <div class="text-xs text-slate-500 font-mono">${p.id}</div>
+                        </td>
+                        <td class="p-4 border-b border-slate-100 text-slate-600">${p.department || '未指定'}</td>
+                        <td class="p-4 border-b border-slate-100">
+                            <div class="flex items-center gap-2">
+                                <div class="w-full bg-slate-200 rounded-full h-2">
+                                    <div class="${colorClass} h-2 rounded-full" style="width: ${Math.min(progress, 100)}%"></div>
+                                </div>
+                                <span class="text-xs font-medium ${progress>90?'text-danger-600':''}">${progress.toFixed(1)}%</span>
+                            </div>
+                        </td>
+                        <td class="p-4 border-b border-slate-100 text-right font-medium text-slate-700">$${p.allocatedBudget.toLocaleString()}</td>
+                        <td class="p-4 border-b border-slate-100 text-right font-bold text-success-600">$${(p.remainingBalance || p.allocatedBudget).toLocaleString()}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        function renderDashboard() {
+            let totalB = 0, totalP = 0, totalE = 0;
+            const projectsHtml = [];
+            
+            window.appState.projects.forEach(p => {
+                totalB += p.allocatedBudget || 0;
+                totalP += p.pendingAmount || 0;
+                totalE += p.expendedAmount || 0;
+
+                const used = ((p.expendedAmount||0) + (p.pendingAmount||0));
+                const pct = p.allocatedBudget ? (used/p.allocatedBudget)*100 : 0;
+                projectsHtml.push(`
+                    <div class="mb-2">
+                        <div class="flex justify-between text-sm mb-1">
+                            <span class="truncate max-w-[200px]" title="${p.title}">${p.title}</span>
+                            <span class="${pct>90?'text-danger-600 font-bold':''}">${pct.toFixed(1)}%</span>
+                        </div>
+                        <div class="w-full bg-slate-100 rounded-full h-1.5">
+                            <div class="${pct>90?'bg-danger-500':(pct>70?'bg-warning-500':'bg-success-500')} h-1.5 rounded-full" style="width: ${Math.min(pct,100)}%"></div>
+                        </div>
+                    </div>
+                `);
+            });
+
+            document.getElementById('dash-total-budget').innerText = `$${totalB.toLocaleString()}`;
+            document.getElementById('dash-pending').innerText = `$${totalP.toLocaleString()}`;
+            document.getElementById('dash-balance').innerText = `$${(totalB - totalP - totalE).toLocaleString()}`;
+            document.getElementById('dash-project-health').innerHTML = projectsHtml.length > 0 ? projectsHtml.join('') : '<div class="text-slate-400 text-sm">無計畫資料</div>';
+
+            // Recent activity
+            const recent = window.appState.reimbursements.sort((a,b) => b.submittedAt - a.submittedAt).slice(0, 4);
+            const actHtml = recent.map(r => `
+                <div class="flex items-center gap-3 text-sm p-2 hover:bg-slate-50 rounded">
+                    <div class="w-2 h-2 rounded-full ${r.status==='approved'?'bg-success-500':(r.status==='rejected'?'bg-danger-500':'bg-warning-500')}"></div>
+                    <div class="flex-1 truncate">${r.description}</div>
+                    <div class="font-medium font-mono">$${r.totalAmount.toLocaleString()}</div>
+                </div>
+            `).join('');
+            document.getElementById('dash-recent-activity').innerHTML = actHtml || '<div class="text-slate-400 text-sm">無近期動態</div>';
+        }
+
+        function populateDropdowns() {
+            const pSelect = document.getElementById('s-project');
+            const rpSelect = document.getElementById('r-project');
+            const opts = window.appState.projects.map(p => `<option value="${p.id}">${p.title} (餘額: $${p.remainingBalance})</option>`).join('');
+            pSelect.innerHTML = opts;
+            rpSelect.innerHTML = opts;
+
+            const tSelect = document.getElementById('s-teacher');
+            tSelect.innerHTML = window.appState.teachers.map(t => `<option value="${t.id}">${t.name} ($${t.hourlyRate}/節)</option>`).join('');
+        }
+
+        window.handleProjectSubmit = async (e) => {
+            e.preventDefault();
+            if(!db) return;
+            const data = {
+                title: document.getElementById('p-title').value,
+                allocatedBudget: Number(document.getElementById('p-budget').value),
+                expendedAmount: 0, pendingAmount: 0,
+                remainingBalance: Number(document.getElementById('p-budget').value),
+                department: '教務處', // Hardcoded for demo
+                createdAt: Date.now()
+            };
+            const customId = document.getElementById('p-id').value;
+            try {
+                await setDoc(doc(getCol('projects'), customId), data);
+                showToast('計畫新增成功', 'success');
+                closeModal('project-modal');
+                e.target.reset();
+            } catch(err) { console.error(err); showToast('新增失敗', 'error'); }
+        };
+
+        window.handleTeacherSubmit = async (e) => {
+            e.preventDefault();
+            if(!db) return;
+            const data = {
+                name: document.getElementById('t-name').value,
+                type: document.getElementById('t-type').value,
+                hourlyRate: Number(document.getElementById('t-rate').value),
+                bankAccount: document.getElementById('t-bank').value,
+                idNumber: document.getElementById('t-idnumber').value,
+                address: document.getElementById('t-address').value,
+                phone: document.getElementById('t-phone').value,
+                isActive: true
+            };
+            try {
+                await addDoc(getCol('teachers'), data);
+                showToast('教師資料儲存成功', 'success');
+                closeModal('teacher-modal');
+                e.target.reset();
+            } catch(err) { showToast('儲存失敗', 'error'); }
+        };
+
+        window.handleSessionSubmit = async (e) => {
+            e.preventDefault();
+            if(!db) return;
+            
+            const tId = document.getElementById('s-teacher').value;
+            const pId = document.getElementById('s-project').value;
+            const date = document.getElementById('s-date').value;
+            const period = Number(document.getElementById('s-period').value);
+            
+            // Anti-Duplicate Check (PRD Rule)
+            const hash = `${tId}_${date}_${period}`;
+            const exists = window.appState.sessions.some(s => s.uniqueHash === hash);
+            if(exists) {
+                showToast(`防呆警告：該教師於 ${date} 第 ${period} 節已登錄！`, 'error');
+                return;
+            }
+
+            const teacher = window.appState.teachers.find(t => t.id === tId);
+            const data = {
+                teacherId: tId,
+                teacherName: teacher.name,
+                projectId: pId,
+                date: date,
+                period: period,
+                hourlyRate: teacher.hourlyRate, // Snapshot
+                subtotal: teacher.hourlyRate * period,
+                status: 'unclaimed',
+                uniqueHash: hash,
+                createdAt: Date.now()
+            };
+
+            try {
+                await addDoc(getCol('sessions'), data);
+                showToast(`授課紀錄 (${date}) 登錄成功`, 'success');
+                // 清空日期欄位，且不關閉 Modal，以利連續輸入
+                document.getElementById('s-date').value = '';
+            } catch(err) { showToast('登錄失敗', 'error'); }
+        };
+
+        function renderSessions() {
+            const tbody = document.getElementById('sessions-table-body');
+            const unclaimed = window.appState.sessions.filter(s => s.status === 'unclaimed').sort((a,b) => b.date.localeCompare(a.date));
+            
+            tbody.innerHTML = unclaimed.map(s => {
+                const days = ['日','一','二','三','四','五','六'];
+                const dayStr = days[new Date(s.date).getDay()];
+                const isChecked = window.appState.selectedSessionsForReceipt.has(s.id) ? 'checked' : '';
+                return `
+                    <tr class="hover:bg-slate-50 ${isChecked ? 'bg-indigo-50/50' : ''}">
+                        <td class="p-3 border-b border-slate-100 text-center">
+                            <input type="checkbox" class="session-cb w-4 h-4 text-primary-600 rounded focus:ring-primary-500" value="${s.id}" ${isChecked} onchange="updateReceiptSelection()">
+                        </td>
+                        <td class="p-3 border-b border-slate-100 text-slate-700">${s.date} (四)</td>
+                        <td class="p-3 border-b border-slate-100 font-medium">${s.teacherName}</td>
+                        <td class="p-3 border-b border-slate-100 text-center">${s.period}</td>
+                        <td class="p-3 border-b border-slate-100 text-right text-slate-500">$${s.hourlyRate}</td>
+                        <td class="p-3 border-b border-slate-100 text-right font-medium">$${s.subtotal.toLocaleString()}</td>
+                    </tr>
+                `;
+            }).join('');
+            
+            updateReceiptPanel();
+        }
+
+        window.toggleAllSessions = () => {
+            const master = document.getElementById('selectAllSessions');
+            document.querySelectorAll('.session-cb').forEach(cb => {
+                cb.checked = master.checked;
+                if(cb.checked) window.appState.selectedSessionsForReceipt.add(cb.value);
+                else window.appState.selectedSessionsForReceipt.delete(cb.value);
+            });
+            renderSessions(); // re-render to update row colors
+        };
+
+        window.updateReceiptSelection = () => {
+            window.appState.selectedSessionsForReceipt.clear();
+            document.querySelectorAll('.session-cb:checked').forEach(cb => {
+                window.appState.selectedSessionsForReceipt.add(cb.value);
+            });
+            renderSessions(); // lazy approach to update row colors
+        };
+
+        function updateReceiptPanel() {
+            let totalPeriods = 0;
+            let totalAmount = 0;
+            let teacherIds = new Set();
+            let selectedTeacher = null;
+
+            window.appState.selectedSessionsForReceipt.forEach(id => {
+                const s = window.appState.sessions.find(x => x.id === id);
+                if(s) {
+                    totalPeriods += s.period;
+                    totalAmount += s.subtotal;
+                    teacherIds.add(s.teacherId);
+                }
+            });
+
+            const btn = document.getElementById('btn-generate-receipt');
+            const tInfoBox = document.getElementById('receipt-teacher-info');
+
+            if(teacherIds.size > 1) {
+                // Invalid: Multiple teachers
+                btn.disabled = true;
+                btn.innerHTML = '<i class="ph ph-warning-circle"></i> 錯誤：包含多位教師';
+                tInfoBox.classList.add('hidden');
+                document.getElementById('receipt-total-amount').classList.replace('text-primary-600', 'text-danger-500');
+            } else if (teacherIds.size === 1) {
+                // Valid
+                btn.disabled = false;
+                btn.innerHTML = '<i class="ph ph-printer"></i> 產製列印版領據';
+                document.getElementById('receipt-total-amount').classList.replace('text-danger-500', 'text-primary-600');
+                
+                const tid = Array.from(teacherIds)[0];
+                selectedTeacher = window.appState.teachers.find(x => x.id === tid);
+                
+                if(selectedTeacher) {
+                    document.getElementById('rt-name').innerText = selectedTeacher.name;
+                    document.getElementById('rt-id').innerText = selectedTeacher.idNumber || '未填寫';
+                    document.getElementById('rt-phone').innerText = selectedTeacher.phone || '未填寫';
+                    document.getElementById('rt-addr').innerText = selectedTeacher.address || '未填寫';
+                    document.getElementById('rt-bank').innerText = selectedTeacher.bankAccount || '未填寫';
+                }
+                tInfoBox.classList.remove('hidden');
+            } else {
+                // Empty
+                btn.disabled = true;
+                btn.innerHTML = '<i class="ph ph-printer"></i> 產製列印版領據';
+                tInfoBox.classList.add('hidden');
+                document.getElementById('receipt-total-amount').classList.replace('text-danger-500', 'text-primary-600');
+            }
+
+            document.getElementById('receipt-total-periods').innerText = `${totalPeriods} 節`;
+            document.getElementById('receipt-total-amount').innerText = `$${totalAmount.toLocaleString()}`;
+        }
+
+        // Utilities for numbers
+        function numberToChinese(num) {
+            const digits = ['零','壹','貳','參','肆','伍','陸','柒','捌','玖'];
+            const units = ['','拾','佰','仟','萬','拾萬','佰萬'];
+            let str = num.toString();
+            let result = '';
+            for(let i=0; i<str.length; i++) {
+                let d = parseInt(str[i]);
+                let u = str.length - 1 - i;
+                if(d !== 0) result += digits[d] + units[u];
+                else if(result.slice(-1) !== '零' && u !== 0) result += '零';
+            }
+            if(result.endsWith('零')) result = result.slice(0, -1);
+            return result;
+        }
+
+        window.generateReceipt = () => {
+            if(window.appState.selectedSessionsForReceipt.size === 0) return;
+            
+            // Build Print View
+            let total = 0;
+            let rowsHtml = '';
+            let tId = null;
+            let pId = null;
+            let dateSet = [];
+
+            Array.from(window.appState.selectedSessionsForReceipt).forEach(id => {
+                const s = window.appState.sessions.find(x => x.id === id);
+                if(s) {
+                    total += s.subtotal;
+                    tId = s.teacherId;
+                    pId = s.projectId;
+                    dateSet.push(s.date);
+                    rowsHtml += `
+                        <tr>
+                            <td class="border border-black p-2 text-center">${s.date}</td>
+                            <td class="border border-black p-2 text-center">${s.period}</td>
+                            <td class="border border-black p-2 text-right">${s.hourlyRate}</td>
+                            <td class="border border-black p-2 text-right">${s.subtotal.toLocaleString()}</td>
+                        </tr>
+                    `;
+                }
+            });
+
+            const t = window.appState.teachers.find(x => x.id === tId);
+            const p = window.appState.projects.find(x => x.id === pId);
+
+            // Compute Year / Month text
+            let ymStr = "";
+            if(dateSet.length > 0) {
+                dateSet.sort();
+                const firstD = new Date(dateSet[0]);
+                const rocYear = firstD.getFullYear() - 1911;
+                const monthStr = String(firstD.getMonth() + 1).padStart(2, '0');
+                ymStr = `${rocYear}年${monthStr}月份`;
+            }
+
+            const schoolName = document.getElementById('receipt-school-input')?.value || '市立高級中學';
+            const clubName = document.getElementById('receipt-club-input')?.value || (p ? p.title : '外聘社團');
+
+            document.getElementById('print-school-name').innerText = schoolName;
+            document.getElementById('print-year-month').innerText = ymStr;
+            document.getElementById('print-club-name').innerText = clubName;
+
+            document.getElementById('print-tbody').innerHTML = rowsHtml;
+            document.getElementById('print-total-num').innerText = `$${total.toLocaleString()}`;
+            document.getElementById('print-total-chinese').innerText = numberToChinese(total);
+            
+            document.getElementById('print-bank-info').innerText = t ? (t.bankAccount || '未填寫') : '';
+            document.getElementById('print-t-id').innerText = t ? (t.idNumber || '') : '';
+            document.getElementById('print-t-addr').innerText = t ? (t.address || '') : '';
+            document.getElementById('print-t-phone').innerText = t ? (t.phone || '') : '';
+            
+            const now = new Date();
+            document.getElementById('print-y').innerText = now.getFullYear() - 1911;
+            document.getElementById('print-m').innerText = now.getMonth() + 1;
+            document.getElementById('print-d').innerText = now.getDate();
+
+            // Trigger Print
+            window.print();
+            showToast('已觸發瀏覽器列印。', 'success');
+        };
+
+        window.checkProjectBalance = () => {
+            const pId = document.getElementById('r-project').value;
+            const amount = Number(document.getElementById('r-amount').value || 0);
+            const warning = document.getElementById('r-balance-warning');
+            const btn = document.getElementById('btn-submit-reimb');
+            
+            if(pId && amount > 0) {
+                const p = window.appState.projects.find(x => x.id === pId);
+                if(p && amount > p.remainingBalance) {
+                    warning.innerText = `🛑 嚴重警告：報銷金額超出計畫餘額 ($${p.remainingBalance.toLocaleString()})`;
+                    warning.classList.remove('hidden');
+                    btn.disabled = true;
+                    btn.classList.add('opacity-50', 'cursor-not-allowed');
+                } else {
+                    warning.classList.add('hidden');
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-50', 'cursor-not-allowed');
+                }
+            }
+        };
+
+        window.handleReimbSubmit = async (e) => {
+            e.preventDefault();
+            if(!db) return;
+
+            const data = {
+                projectId: document.getElementById('r-project').value,
+                applicantId: window.appState.user.uid,
+                applicantName: document.getElementById('user-badge').innerText.trim(),
+                category: document.getElementById('r-category').value,
+                description: document.getElementById('r-desc').value,
+                totalAmount: Number(document.getElementById('r-amount').value),
+                status: 'approved', // 省略審核，直接核准
+                submittedAt: Date.now()
+            };
+
+            // Save to Firestore directly without Gemini AI wait
+            try {
+                await addDoc(getCol('reimbursements'), data);
+                
+                const pRef = doc(getCol('projects'), data.projectId);
+                const p = window.appState.projects.find(x => x.id === data.projectId);
+                if(p) {
+                    const newExpended = (p.expendedAmount || 0) + data.totalAmount;
+                    await updateDoc(pRef, { 
+                        expendedAmount: newExpended,
+                        remainingBalance: p.allocatedBudget - newExpended - (p.pendingAmount || 0)
+                    });
+                }
+
+                showToast('報銷單已建立並自動核准', 'success');
+                closeModal('reimbursement-modal');
+                e.target.reset();
+            } catch(err) {
+                showToast('送件失敗', 'error');
+            }
+        };
+
+        let currentFilter = 'all';
+        window.filterReimb = (filter) => {
+            currentFilter = filter;
+            document.querySelectorAll('.reimb-filter').forEach(el => {
+                if(el.dataset.filter === filter) {
+                    el.classList.replace('bg-slate-100', 'bg-slate-800');
+                    el.classList.replace('text-slate-600', 'text-white');
+                } else {
+                    el.classList.replace('bg-slate-800', 'bg-slate-100');
+                    el.classList.replace('text-white', 'text-slate-600');
+                }
+            });
+            renderReimbursements();
+        };
+
+        function renderReimbursements() {
+            const list = document.getElementById('reimbursements-list');
+            let data = window.appState.reimbursements.sort((a,b) => b.submittedAt - a.submittedAt);
+            
+            if(currentFilter !== 'all') {
+                data = data.filter(r => r.status === currentFilter);
+            }
+
+            if(data.length === 0) {
+                list.innerHTML = '<div class="text-center py-10 text-slate-500">尚無符合的單據</div>';
+                return;
+            }
+
+            list.innerHTML = data.map(r => {
+                const p = window.appState.projects.find(x => x.id === r.projectId);
+                const isReviewer = window.appState.role === 'reviewer' || window.appState.role === 'admin';
+                
+                let statusBadge = '';
+                if(r.status==='pending') statusBadge = '<span class="px-2 py-1 rounded bg-amber-100 text-amber-700 text-xs">待審核</span>';
+                if(r.status==='approved') statusBadge = '<span class="px-2 py-1 rounded bg-success-100 text-success-700 text-xs">已核准</span>';
+                if(r.status==='rejected') statusBadge = '<span class="px-2 py-1 rounded bg-rose-100 text-rose-700 text-xs">已駁回</span>';
+
+                let aiBadge = '';
+                if(r.aiAnalysis) {
+                    let color = 'text-magic-600';
+                    let icon = 'ph-sparkle';
+                    if(r.aiAnalysis.riskLevel === 'high') { color = 'text-danger-600'; icon='ph-warning'; }
+                    if(r.aiAnalysis.riskLevel === 'low') { color = 'text-success-600'; icon='ph-check-circle'; }
+                    aiBadge = `
+                        <div class="mt-3 bg-magic-50 rounded p-3 text-sm flex gap-2 border border-magic-100">
+                            <i class="ph ${icon} ${color} text-lg shrink-0 mt-0.5"></i>
+                            <div class="text-slate-700 leading-relaxed"><strong>Gemini 分析：</strong>${r.aiAnalysis.summary}</div>
+                        </div>
+                    `;
+                }
+
+                let actionBtn = '';
+                if(r.status === 'pending' && isReviewer) {
+                    actionBtn = `<button onclick="openReview('${r.id}')" class="mt-4 px-4 py-2 bg-slate-800 text-white rounded-lg text-sm hover:bg-slate-900 w-full md:w-auto">進行審核</button>`;
+                }
+
+                return `
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 hover:shadow-md transition-shadow">
+                        <div class="flex justify-between items-start mb-2">
+                            <div>
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="font-bold text-lg text-slate-800">$${r.totalAmount.toLocaleString()}</span>
+                                    ${statusBadge}
+                                    <span class="text-xs text-slate-400 font-mono">ID: ${r.id.substring(0,8)}</span>
+                                </div>
+                                <div class="text-sm text-slate-600 font-medium">${p ? p.title : '未知計畫'} | ${r.category}</div>
+                            </div>
+                            <div class="text-right text-xs text-slate-500">
+                                <div>申請人: ${r.applicantName}</div>
+                                <div>${new Date(r.submittedAt).toLocaleDateString()}</div>
+                            </div>
+                        </div>
+                        <p class="text-slate-700 mt-2">${r.description}</p>
+                        ${aiBadge}
+                        ${actionBtn}
+                        ${r.status !== 'pending' && r.reviewComment ? `<div class="mt-3 text-sm text-slate-500 italic bg-slate-50 p-2 rounded">主管意見：${r.reviewComment}</div>` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        let activeReviewId = null;
+        window.openReview = (id) => {
+            activeReviewId = id;
+            const r = window.appState.reimbursements.find(x => x.id === id);
+            const p = window.appState.projects.find(x => x.id === r.projectId);
+            
+            let riskAlert = '';
+            if(r.aiAnalysis?.riskLevel === 'high') {
+                riskAlert = `<div class="p-3 bg-rose-50 text-rose-700 rounded-lg text-sm mb-3 border border-rose-200"><i class="ph ph-warning-octagon"></i> 系統偵測到高風險，請審慎評估餘額。</div>`;
+            }
+
+            document.getElementById('review-content').innerHTML = `
+                ${riskAlert}
+                <div class="grid grid-cols-2 gap-4 text-sm bg-slate-50 p-4 rounded-lg border border-slate-100 mb-2">
+                    <div><span class="text-slate-500 block">計畫名稱</span> <span class="font-medium">${p?p.title:'-'}</span></div>
+                    <div><span class="text-slate-500 block">報銷金額</span> <span class="font-bold text-primary-600 text-lg">$${r.totalAmount.toLocaleString()}</span></div>
+                    <div class="col-span-2"><span class="text-slate-500 block">申請事由</span> <span>${r.description}</span></div>
+                </div>
+            `;
+            document.getElementById('review-comment').value = '';
+            openModal('review-modal');
+        };
+
+        window.processReview = async (decision) => {
+            if(!db || !activeReviewId) return;
+            const r = window.appState.reimbursements.find(x => x.id === activeReviewId);
+            const p = window.appState.projects.find(x => x.id === r.projectId);
+            const comment = document.getElementById('review-comment').value;
+            
+            if(decision === 'rejected' && !comment.trim()) {
+                showToast('駁回時請務必填寫審核意見', 'error');
+                return;
+            }
+
+            try {
+                // Update reimbursement
+                await updateDoc(doc(getCol('reimbursements'), r.id), {
+                    status: decision,
+                    reviewerId: window.appState.user.uid,
+                    reviewerName: document.getElementById('user-badge').innerText.trim(),
+                    reviewComment: comment,
+                    reviewedAt: Date.now()
+                });
+
+                // Update Project Budget
+                if(p) {
+                    const newPending = Math.max(0, (p.pendingAmount||0) - r.totalAmount);
+                    let updates = { pendingAmount: newPending };
+                    
+                    if(decision === 'approved') {
+                        updates.expendedAmount = (p.expendedAmount||0) + r.totalAmount;
+                        updates.remainingBalance = p.allocatedBudget - updates.expendedAmount - newPending;
+                    } else if (decision === 'rejected') {
+                        updates.remainingBalance = p.allocatedBudget - (p.expendedAmount||0) - newPending;
+                    }
+                    await updateDoc(doc(getCol('projects'), p.id), updates);
+                }
+
+                showToast(`單據已${decision==='approved'?'核准':'駁回'}`, 'success');
+                closeModal('review-modal');
+            } catch(err) { console.error(err); showToast('審核處理失敗', 'error'); }
+        };
+
+    </script>
+</body>
+</html>
