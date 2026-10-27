@@ -164,7 +164,7 @@
                 <div id="tab-projects" class="tab-content max-w-6xl mx-auto">
                     <div class="flex justify-between items-center mb-6">
                         <h2 class="text-2xl font-bold text-slate-800">計畫預算管理</h2>
-                        <button onclick="openModal('project-modal')" class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition-colors flex items-center gap-2 admin-only hidden">
+                        <button onclick="openProjectForm()" class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition-colors flex items-center gap-2 admin-only hidden">
                             <i class="ph ph-plus-circle text-lg"></i> 新增計畫
                         </button>
                     </div>
@@ -178,6 +178,7 @@
                                     <th class="p-4 font-medium">執行進度 (已用+待審)</th>
                                     <th class="p-4 font-medium text-right">總額度</th>
                                     <th class="p-4 font-medium text-right">可用餘額</th>
+                                    <th class="p-4 font-medium text-center">操作</th>
                                 </tr>
                             </thead>
                             <tbody id="projects-table-body" class="divide-y divide-slate-100">
@@ -212,7 +213,7 @@
                     <div class="flex justify-between items-center mb-6">
                         <h2 class="text-2xl font-bold text-slate-800">教師鐘點與領據</h2>
                         <div class="flex gap-2">
-                            <button onclick="openModal('teacher-modal')" class="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded-lg font-medium shadow-sm transition-colors flex items-center gap-2 admin-only hidden">
+                            <button onclick="openTeacherManagement()" class="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded-lg font-medium shadow-sm transition-colors flex items-center gap-2 admin-only hidden">
                                 <i class="ph ph-user-plus text-lg"></i> 管理教師檔
                             </button>
                             <button onclick="openModal('session-modal')" class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition-colors flex items-center gap-2 applicant-only hidden">
@@ -330,12 +331,40 @@
             </div>
         </div>
 
-        <!-- Teacher Modal -->
-        <div id="teacher-modal" class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center z-50">
+        <!-- Teacher List Modal -->
+        <div id="teacher-list-modal" class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center z-50">
+            <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl p-6 h-[70vh] flex flex-col">
+                <div class="flex justify-between items-center mb-4 shrink-0">
+                    <h3 class="text-lg font-bold">管理教師檔</h3>
+                    <div class="flex gap-2">
+                        <button onclick="openTeacherForm()" class="bg-primary-600 hover:bg-primary-700 text-white px-3 py-1.5 rounded-lg text-sm flex items-center gap-1"><i class="ph ph-plus"></i> 新增教師</button>
+                        <button onclick="closeModal('teacher-list-modal')" class="text-slate-400 hover:text-slate-600"><i class="ph ph-x text-xl"></i></button>
+                    </div>
+                </div>
+                <div class="flex-1 overflow-y-auto">
+                    <table class="w-full text-left border-collapse text-sm">
+                        <thead class="bg-slate-50 sticky top-0">
+                            <tr class="text-slate-500 border-b border-slate-200">
+                                <th class="p-3">姓名</th>
+                                <th class="p-3">類別</th>
+                                <th class="p-3 text-right">單節鐘點</th>
+                                <th class="p-3 text-center">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="teachers-table-body" class="divide-y divide-slate-100">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Teacher Form Modal -->
+        <div id="teacher-form-modal" class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center z-50">
             <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
                 <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-lg font-bold">新增教師基本資料</h3>
-                    <button onclick="closeModal('teacher-modal')" class="text-slate-400 hover:text-slate-600"><i class="ph ph-x text-xl"></i></button>
+                    <h3 class="text-lg font-bold" id="teacher-form-title">新增教師基本資料</h3>
+                    <button onclick="closeModal('teacher-form-modal')" class="text-slate-400 hover:text-slate-600"><i class="ph ph-x text-xl"></i></button>
                 </div>
                 <form id="teacher-form" onsubmit="handleTeacherSubmit(event)" class="space-y-4">
                     <div>
@@ -374,7 +403,7 @@
                         <input type="text" id="t-address" class="mt-1 w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-primary-500 outline-none" placeholder="例如: 台北市中正區中山南路1號">
                     </div>
                     <div class="pt-4 flex justify-end gap-2">
-                        <button type="button" onclick="closeModal('teacher-modal')" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">取消</button>
+                        <button type="button" onclick="closeModal('teacher-form-modal')" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">取消</button>
                         <button type="submit" class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">儲存資料</button>
                     </div>
                 </form>
@@ -560,7 +589,9 @@
             teachers: [],
             sessions: [],
             reimbursements: [],
-            selectedSessionsForReceipt: new Set()
+            selectedSessionsForReceipt: new Set(),
+            editingProjectId: null,
+            editingTeacherId: null
         };
 
         // Firebase Init based on updated configuration
@@ -676,6 +707,7 @@
             unsubTeachers = onSnapshot(getCol('teachers'), (snap) => {
                 window.appState.teachers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                 populateDropdowns();
+                renderTeachers(); // Update list if open
             }, (err) => console.error(err));
 
             unsubSessions = onSnapshot(getCol('sessions'), (snap) => {
@@ -708,6 +740,35 @@
         window.openModal = (id) => document.getElementById(id).classList.remove('hidden', 'flex');
         window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
 
+        window.openProjectForm = () => {
+            window.appState.editingProjectId = null;
+            document.getElementById('p-id').readOnly = false;
+            document.getElementById('p-id').classList.remove('bg-slate-100');
+            document.getElementById('project-form').reset();
+            openModal('project-modal');
+        };
+
+        window.editProject = (id) => {
+            window.appState.editingProjectId = id;
+            const p = window.appState.projects.find(x => x.id === id);
+            if(!p) return;
+            document.getElementById('p-id').value = p.id;
+            document.getElementById('p-id').readOnly = true;
+            document.getElementById('p-id').classList.add('bg-slate-100');
+            document.getElementById('p-title').value = p.title;
+            document.getElementById('p-budget').value = p.allocatedBudget;
+            openModal('project-modal');
+        };
+
+        window.deleteProject = async (id) => {
+            if(!confirm('確定要刪除這個計畫嗎？相關的資料(報銷單等)可能會遺失關聯。')) return;
+            if(!db) return;
+            try {
+                await deleteDoc(doc(getCol('projects'), id));
+                showToast('計畫已刪除', 'success');
+            } catch(err) { showToast('刪除失敗', 'error'); }
+        };
+
         function renderProjects() {
             const tbody = document.getElementById('projects-table-body');
             tbody.innerHTML = '';
@@ -736,6 +797,10 @@
                         </td>
                         <td class="p-4 border-b border-slate-100 text-right font-medium text-slate-700">$${p.allocatedBudget.toLocaleString()}</td>
                         <td class="p-4 border-b border-slate-100 text-right font-bold text-success-600">$${(p.remainingBalance || p.allocatedBudget).toLocaleString()}</td>
+                        <td class="p-4 border-b border-slate-100 text-center">
+                            <button onclick="editProject('${p.id}')" class="text-primary-600 hover:text-primary-800 p-1" title="編輯"><i class="ph ph-pencil-simple text-lg"></i></button>
+                            <button onclick="deleteProject('${p.id}')" class="text-danger-600 hover:text-danger-800 p-1 ml-1" title="刪除"><i class="ph ph-trash text-lg"></i></button>
+                        </td>
                     </tr>
                 `;
             });
@@ -796,21 +861,37 @@
         window.handleProjectSubmit = async (e) => {
             e.preventDefault();
             if(!db) return;
-            const data = {
-                title: document.getElementById('p-title').value,
-                allocatedBudget: Number(document.getElementById('p-budget').value),
-                expendedAmount: 0, pendingAmount: 0,
-                remainingBalance: Number(document.getElementById('p-budget').value),
-                department: '教務處', // Hardcoded for demo
-                createdAt: Date.now()
-            };
             const customId = document.getElementById('p-id').value;
-            try {
-                await setDoc(doc(getCol('projects'), customId), data);
-                showToast('計畫新增成功', 'success');
-                closeModal('project-modal');
-                e.target.reset();
-            } catch(err) { console.error(err); showToast('新增失敗', 'error'); }
+            const newBudget = Number(document.getElementById('p-budget').value);
+
+            if(window.appState.editingProjectId) {
+                const p = window.appState.projects.find(x => x.id === window.appState.editingProjectId);
+                const updates = {
+                    title: document.getElementById('p-title').value,
+                    allocatedBudget: newBudget,
+                    remainingBalance: newBudget - (p.expendedAmount || 0) - (p.pendingAmount || 0)
+                };
+                try {
+                    await updateDoc(doc(getCol('projects'), customId), updates);
+                    showToast('計畫修改成功', 'success');
+                    closeModal('project-modal');
+                } catch(err) { console.error(err); showToast('修改失敗', 'error'); }
+            } else {
+                const data = {
+                    title: document.getElementById('p-title').value,
+                    allocatedBudget: newBudget,
+                    expendedAmount: 0, pendingAmount: 0,
+                    remainingBalance: newBudget,
+                    department: '輔導室', // 已更新預設處室
+                    createdAt: Date.now()
+                };
+                try {
+                    await setDoc(doc(getCol('projects'), customId), data);
+                    showToast('計畫新增成功', 'success');
+                    closeModal('project-modal');
+                    e.target.reset();
+                } catch(err) { console.error(err); showToast('新增失敗', 'error'); }
+            }
         };
 
         window.handleTeacherSubmit = async (e) => {
@@ -827,12 +908,69 @@
                 isActive: true
             };
             try {
-                await addDoc(getCol('teachers'), data);
-                showToast('教師資料儲存成功', 'success');
-                closeModal('teacher-modal');
+                if(window.appState.editingTeacherId) {
+                    await updateDoc(doc(getCol('teachers'), window.appState.editingTeacherId), data);
+                    showToast('教師資料修改成功', 'success');
+                } else {
+                    await addDoc(getCol('teachers'), data);
+                    showToast('教師資料新增成功', 'success');
+                }
+                closeModal('teacher-form-modal');
                 e.target.reset();
             } catch(err) { showToast('儲存失敗', 'error'); }
         };
+
+        window.openTeacherManagement = () => {
+            renderTeachers();
+            openModal('teacher-list-modal');
+        };
+
+        window.openTeacherForm = () => {
+            window.appState.editingTeacherId = null;
+            document.getElementById('teacher-form-title').innerText = '新增教師基本資料';
+            document.getElementById('teacher-form').reset();
+            openModal('teacher-form-modal');
+        };
+
+        window.editTeacher = (id) => {
+            window.appState.editingTeacherId = id;
+            const t = window.appState.teachers.find(x => x.id === id);
+            if(!t) return;
+            document.getElementById('teacher-form-title').innerText = '修改教師基本資料';
+            document.getElementById('t-name').value = t.name;
+            document.getElementById('t-type').value = t.type;
+            document.getElementById('t-rate').value = t.hourlyRate;
+            document.getElementById('t-idnumber').value = t.idNumber || '';
+            document.getElementById('t-phone').value = t.phone || '';
+            document.getElementById('t-bank').value = t.bankAccount || '';
+            document.getElementById('t-address').value = t.address || '';
+            openModal('teacher-form-modal');
+        };
+
+        window.deleteTeacher = async (id) => {
+            if(!confirm('確定要刪除這位教師嗎？')) return;
+            if(!db) return;
+            try {
+                await deleteDoc(doc(getCol('teachers'), id));
+                showToast('教師已刪除', 'success');
+            } catch(err) { showToast('刪除失敗', 'error'); }
+        };
+
+        function renderTeachers() {
+            const tbody = document.getElementById('teachers-table-body');
+            if(!tbody) return;
+            tbody.innerHTML = window.appState.teachers.map(t => `
+                <tr class="hover:bg-slate-50 border-b border-slate-100">
+                    <td class="p-3 font-medium text-slate-800">${t.name}</td>
+                    <td class="p-3 text-slate-600">${t.type}</td>
+                    <td class="p-3 text-right font-medium">$${t.hourlyRate}</td>
+                    <td class="p-3 text-center">
+                        <button onclick="editTeacher('${t.id}')" class="text-primary-600 hover:text-primary-800 p-1" title="編輯"><i class="ph ph-pencil-simple text-lg"></i></button>
+                        <button onclick="deleteTeacher('${t.id}')" class="text-danger-600 hover:text-danger-800 p-1 ml-1" title="刪除"><i class="ph ph-trash text-lg"></i></button>
+                    </td>
+                </tr>
+            `).join('');
+        }
 
         window.handleSessionSubmit = async (e) => {
             e.preventDefault();
@@ -995,22 +1133,26 @@
             let pId = null;
             let dateSet = [];
 
-            Array.from(window.appState.selectedSessionsForReceipt).forEach(id => {
-                const s = window.appState.sessions.find(x => x.id === id);
-                if(s) {
-                    total += s.subtotal;
-                    tId = s.teacherId;
-                    pId = s.projectId;
-                    dateSet.push(s.date);
-                    rowsHtml += `
-                        <tr>
-                            <td class="border border-black p-2 text-center">${s.date}</td>
-                            <td class="border border-black p-2 text-center">${s.period}</td>
-                            <td class="border border-black p-2 text-right">${s.hourlyRate}</td>
-                            <td class="border border-black p-2 text-right">${s.subtotal.toLocaleString()}</td>
-                        </tr>
-                    `;
-                }
+            // 取出選取的 Session 並依日期由遠至近排列
+            const selectedSessions = Array.from(window.appState.selectedSessionsForReceipt)
+                .map(id => window.appState.sessions.find(x => x.id === id))
+                .filter(s => s);
+                
+            selectedSessions.sort((a, b) => a.date.localeCompare(b.date));
+
+            selectedSessions.forEach(s => {
+                total += s.subtotal;
+                tId = s.teacherId;
+                pId = s.projectId;
+                dateSet.push(s.date);
+                rowsHtml += `
+                    <tr>
+                        <td class="border border-black p-2 text-center">${s.date}</td>
+                        <td class="border border-black p-2 text-center">${s.period}</td>
+                        <td class="border border-black p-2 text-right">${s.hourlyRate}</td>
+                        <td class="border border-black p-2 text-right">${s.subtotal.toLocaleString()}</td>
+                    </tr>
+                `;
             });
 
             const t = window.appState.teachers.find(x => x.id === tId);
