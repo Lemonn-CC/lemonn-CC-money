@@ -39,11 +39,16 @@
         .toast.info { background-color: #4f46e5; }
 
         /* Print Styles for Receipt */
+        @media screen {
+            #print-area { display: none; }
+        }
         @media print {
-            body * { visibility: hidden; }
-            #print-area, #print-area * { visibility: visible; }
-            #print-area { position: absolute; left: 0; top: 0; width: 100%; background: white; padding: 20px; }
-            .no-print { display: none !important; }
+            /* 重置網頁高度與隱藏卷軸，避免列印被裁切成空白 */
+            html, body { height: auto !important; overflow: visible !important; display: block !important; background-color: white; }
+            /* 隱藏除了列印區塊以外的所有 UI 介面 */
+            body > *:not(#print-area) { display: none !important; }
+            /* 確保列印區塊顯示 */
+            #print-area { display: block !important; width: 100%; }
         }
     </style>
 </head>
@@ -529,7 +534,7 @@
     <!-- Toast Container -->
     <div id="toast-container"></div>
 
-    <div id="print-area" class="no-print">
+    <div id="print-area">
         <div class="text-center mb-8">
             <h1 class="text-2xl font-bold border-b-2 border-black inline-block pb-1">領 據</h1>
         </div>
